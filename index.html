@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>單字保衛戰 - 英文拼字趣味學習遊戲</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Fredoka One', 'Noto Sans TC', sans-serif;
+        }
+
+        /* 閃爍動畫特效 */
+        @keyframes pulse-red {
+            0%, 100% { background-color: rgb(239, 68, 68); transform: scale(1); }
+            50% { background-color: rgb(220, 38, 38); transform: scale(0.95); }
+        }
+        .animate-pulse-red {
+            animation: pulse-red 0.2s ease-in-out;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { background-color: rgb(34, 197, 94); transform: scale(1.1); }
+            50% { background-color: rgb(22, 163, 74); transform: scale(1); }
+        }
+        .animate-pulse-green {
+            animation: pulse-green 0.2s ease-in-out;
+        }
+
+        /* 單字落地時的震動效果 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .shake-effect {
+            animation: shake 0.4s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col justify-between overflow-hidden select-none">
+
+    <!-- 遊戲頂部資訊列 (HUD) -->
+    <header class="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center z-10">
+        <!-- 分數 -->
+        <div class="flex items-center space-x-2">
+            <span class="text-sm md:text-base text-gray-400">SCORE:</span>
+            <span id="score-display" class="text-2xl md:text-3xl font-extrabold text-yellow-400">0</span>
+        </div>
+
+        <!-- 遊戲標題 -->
+        <div class="hidden sm:block text-center">
+            <h1 class="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">
+                單字保衛戰 <span class="text-xs text-gray-400 font-normal">Word Defense</span>
+            </h1>
+        </div>
+
+        <!-- 生命值 (3顆愛心) -->
+        <div class="flex items-center space-x-2">
+            <span class="text-sm md:text-base text-gray-400 mr-1">LIVES:</span>
+            <div id="heart-container" class="flex space-x-1">
+                <!-- 由 JS 動態生成與更新紅心 -->
+                <svg class="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>
+                <svg class="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>
+                <svg class="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>
+            </div>
+        </div>
+    </header>
+
+    <!-- 遊戲主要互動/掉落區 -->
+    <main id="game-stage" class="relative flex-1 w-full overflow-hidden bg-gradient-to-b from-gray-900 via-gray-950 to-gray-900">
+        
+        <!-- 背景裝飾與教育小語 (開始與結束畫面會蓋在最上面) -->
+        <div id="instruction-hint" class="absolute inset-x-0 top-6 text-center pointer-events-none opacity-40 transition-opacity duration-500">
+            <p class="text-xs md:text-sm text-teal-400">提示：請按下「底線處」正確的英文字母，保護單字不落地！</p>
+        </div>
+
+        <!-- 單字降落地點臨界線提示 -->
+        <div class="absolute bottom-4 left-0 w-full border-t border-dashed border-red-500/20 pointer-events-none flex justify-center">
+            <span class="bg-gray-950/80 px-3 py-1 text-[10px] text-red-400 rounded-full border border-red-500/20 uppercase tracking-widest">
+                Defense Line (防禦線)
+            </span>
+        </div>
+
+        <!-- 動態生成的掉落單字將會掛載在此區 -->
+        <div id="word-drop-zone" class="absolute inset-0"></div>
+
+    </main>
+
+    <!-- 底部虛擬鍵盤區 -->
+    <footer class="p-4 bg-gray-800/90 border-t border-gray-700 backdrop-blur-md z-10">
+        <div class="max-w-4xl mx-auto">
+            <!-- 虛擬鍵盤布局 (QWERTY，更貼近日常打字練習，利於肌肉記憶) -->
+            <div class="flex flex-col gap-2">
+                <!-- 第一排 -->
+                <div class="flex justify-center gap-1.5 md:gap-2">
+                    <button data-key="Q" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">Q</button>
+                    <button data-key="W" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">W</button>
+                    <button data-key="E" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">E</button>
+                    <button data-key="R" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">R</button>
+                    <button data-key="T" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">T</button>
+                    <button data-key="Y" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">Y</button>
+                    <button data-key="U" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">U</button>
+                    <button data-key="I" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">I</button>
+                    <button data-key="O" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">O</button>
+                    <button data-key="P" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">P</button>
+                </div>
+                <!-- 第二排 -->
+                <div class="flex justify-center gap-1.5 md:gap-2">
+                    <button data-key="A" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">A</button>
+                    <button data-key="S" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">S</button>
+                    <button data-key="D" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">D</button>
+                    <button data-key="F" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">F</button>
+                    <button data-key="G" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">G</button>
+                    <button data-key="H" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">H</button>
+                    <button data-key="J" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">J</button>
+                    <button data-key="K" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">K</button>
+                    <button data-key="L" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">L</button>
+                </div>
+                <!-- 第三排 -->
+                <div class="flex justify-center gap-1.5 md:gap-2">
+                    <button data-key="Z" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">Z</button>
+                    <button data-key="X" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">X</button>
+                    <button data-key="C" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">C</button>
+                    <button data-key="V" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">V</button>
+                    <button data-key="B" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">B</button>
+                    <button data-key="N" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">N</button>
+                    <button data-key="M" class="virtual-key w-8 h-11 sm:w-10 sm:h-12 md:w-12 md:h-14 bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all rounded-lg font-bold text-lg md:text-xl flex items-center justify-center border-b-4 border-gray-900 text-teal-200">M</button>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 全螢幕遮罩：開始畫面、遊戲結束、說明 -->
+    <div id="overlay" class="absolute inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+        <!-- 開始畫面 / 介紹 -->
+        <div id="start-panel" class="max-w-md w-full bg-gray-800 rounded-3xl p-6 border-2 border-teal-500 shadow-2xl text-center flex flex-col items-center">
+            <div class="w-20 h-20 bg-teal-500/10 rounded-full flex items-center justify-center mb-4 border border-teal-500">
+                <svg class="w-10 h-10 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            </div>
+            <h2 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400 mb-2">單字保衛戰</h2>
+            <p class="text-gray-300 text-sm mb-6 leading-relaxed">
+                保護落下的國小常用英文單字！<br>
+                在單字跨越底部<b>紅色防禦線</b>前，觀察單字中被隱藏起來的字母，並按下鍵盤（實體或虛擬）來完成它吧！
+            </p>
+            <div class="w-full bg-gray-900/50 rounded-xl p-4 text-left border border-gray-700/50 mb-6 text-xs text-gray-400 leading-relaxed">
+                <p class="font-bold text-teal-300 mb-1">【教育心理學核心設計】</p>
+                <li><b>拼寫提取練習：</b>藉由遮蓋字母促進大腦的主動回想（Active Retrieval）。</li>
+                <li><b>音型連結機制：</b>透過音效增強大腦對於正確拼寫的正向連結。</li>
+            </div>
+            <button id="btn-start" class="w-full py-4 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 font-extrabold text-lg text-white rounded-2xl shadow-lg hover:shadow-teal-500/20 active:scale-95 transition-all">
+                開始戰鬥
+            </button>
+        </div>
+
+        <!-- 遊戲結束畫面 -->
+        <div id="gameover-panel" class="hidden max-w-md w-full bg-gray-800 rounded-3xl p-6 border-2 border-red-500 shadow-2xl text-center flex flex-col items-center">
+            <div class="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500 animate-pulse">
+                <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <h2 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400 mb-2">再接再厲！</h2>
+            <p class="text-gray-300 text-sm mb-4 leading-relaxed">
+                守護失敗了，但這是必經之路！<br>
+                大腦正因為剛才的練習建立全新的神經連結。
+            </p>
+            
+            <div class="bg-gray-900/60 rounded-2xl p-4 w-full border border-gray-700/80 mb-6 space-y-2">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-400">本次守護分數：</span>
+                    <span id="final-score" class="text-xl font-bold text-yellow-400">0</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-400">最高紀錄：</span>
+                    <span id="high-score" class="text-lg font-bold text-teal-300">0</span>
+                </div>
+            </div>
+
+            <p class="text-xs text-teal-400 mb-6 italic">「下一次，你一定會表現得更出色！」</p>
+
+            <button id="btn-restart" class="w-full py-4 bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-400 hover:to-blue-400 font-extrabold text-lg text-white rounded-2xl shadow-lg active:scale-95 transition-all">
+                再次挑戰
+            </button>
+        </div>
+    </div>
+
+    <!-- 網頁主控 JS 邏輯 -->
+    <script>
+        // --- Web Audio API 音效產生器 ---
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioCtx();
+            }
+        }
+
+        function playSynthSound(type) {
+            if (!audioCtx) return;
+            // 確保音訊環境已啟動（部分瀏覽器需要使用者互動才能解鎖）
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'success') {
+                // 清脆的上升音效 (主動學習增強)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.15); // A5
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'fail') {
+                // 短促溫和的挫敗音 (避免嚴重否定感，但給予明確指引)
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(196, now); // G3
+                osc.frequency.setValueAtTime(147, now + 0.08); // D3
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'damage') {
+                // 生命值扣減的爆炸聲
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        // --- 遊戲邏輯 ---
+        
+        // 國小常用單字庫 (精選15個字)
+        const WORD_BANK = [
+            "APPLE", "BANANA", "TIGER", "ORANGE", "CHERRY", 
+            "ZEBRA", "GIRAFFE", "ELEPHANT", "MONKEY", "PENCIL", 
+            "BREAD", "CHEESE", "MILK", "WATER", "FLOWER"
+        ];
+
+        let score = 0;
+        let lives = 3;
+        let highScore = 0;
+        let gameActive = false;
+        
+        // 目前掉落中的單字資料結構
+        let currentDropWord = null; 
+        let lastTime = 0;
+        let dropZoneHeight = 0;
+        let gameLoopId = null;
+
+        // 快照 DOM 元素
+        const scoreDisplay = document.getElementById("score-display");
+        const heartContainer = document.getElementById("heart-container");
+        const gameStage = document.getElementById("game-stage");
+        const wordDropZone = document.getElementById("word-drop-zone");
+        const overlay = document.getElementById("overlay");
+        const startPanel = document.getElementById("start-panel");
+        const gameoverPanel = document.getElementById("gameover-panel");
+        const btnStart = document.getElementById("btn-start");
+        const btnRestart = document.getElementById("btn-restart");
+        const finalScore = document.getElementById("final-score");
+        const highScoreDisplay = document.getElementById("high-score");
+        const keys = document.querySelectorAll(".virtual-key");
+
+        // 計算適應性的掉落基準速度 (隨著分數增加難度稍微爬升)
+        function getSpeed() {
+            // 基本速度為每秒 80px，每 50 分增加 15px/秒，最高上限 200px/秒
+            const baseSpeed = 70; 
+            const speedIncrement = Math.floor(score / 50) * 15;
+            return Math.min(baseSpeed + speedIncrement, 190);
+        }
+
+        // 初始化/更新生命值心型 UI
+        function updateHeartsUI() {
+            heartContainer.innerHTML = "";
+            for (let i = 0; i < 3; i++) {
+                if (i < lives) {
+                    // 紅心
+                    heartContainer.innerHTML += `
+                        <svg class="w-6 h-6 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)] transition-all duration-300 transform scale-100" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/>
+                        </svg>
+                    `;
+                } else {
+                    // 灰色愛心 (破碎或耗盡)
+                    heartContainer.innerHTML += `
+                        <svg class="w-6 h-6 text-gray-600 transition-all duration-300 transform scale-90" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/>
+                        </svg>
+                    `;
+                }
+            }
+        }
+
+        // 隨機生成新單字
+        function spawnWord() {
+            // 清理舊的
+            wordDropZone.innerHTML = "";
+            
+            // 隨機挑字
+            const rawWord = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
+            
+            // 隨機選擇一個字母作為遮蓋目標
+            const targetIndex = Math.floor(Math.random() * rawWord.length);
+            const targetLetter = rawWord[targetIndex];
+            
+            // 建立遮蓋後字串 (例如 A_PLE)
+            let maskedWord = "";
+            for (let i = 0; i < rawWord.length; i++) {
+                if (i === targetIndex) {
+                    maskedWord += " <span class='text-yellow-400 underline font-black decoration-2 underline-offset-4 animate-pulse'>_</span> ";
+                } else {
+                    maskedWord += rawWord[i];
+                }
+            }
+
+            // 建立 DOM 元素
+            const wordEl = document.createElement("div");
+            wordEl.className = "absolute transition-colors duration-200 text-center select-none font-bold";
+            // 根據單字長度微調字體大小，在大螢幕和小螢幕上皆有良好的對比度
+            wordEl.style.fontSize = "clamp(1.5rem, 6vw, 2.8rem)";
+            wordEl.style.letterSpacing = "0.15em";
+            wordEl.style.textShadow = "0 4px 10px rgba(0,0,0,0.8)";
+            wordEl.innerHTML = maskedWord;
+
+            // 掛載並計算隨機 X 軸起點
+            wordDropZone.appendChild(wordEl);
+            
+            // 取得 stage 的邊界
+            const stageWidth = gameStage.clientWidth;
+            const wordWidth = wordEl.clientWidth || 200; // 預防初始讀取無寬度
+            
+            // 限制左右邊距避免單字跑出界外
+            const minX = 16;
+            const maxX = Math.max(stageWidth - wordWidth - 16, 16);
+            const startX = Math.random() * (maxX - minX) + minX;
+
+            currentDropWord = {
+                element: wordEl,
+                fullWord: rawWord,
+                targetIndex: targetIndex,
+                targetLetter: targetLetter,
+                x: startX,
+                y: -50, // 從畫面頂端外開始掉
+                width: wordWidth,
+                speed: getSpeed(),
+                status: 'falling' // 'falling', 'solved', 'failed'
+            };
+
+            // 套用座標
+            wordEl.style.transform = `translate3d(${currentDropWord.x}px, ${currentDropWord.y}px, 0)`;
+        }
+
+        // 核心動畫循環
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = (timestamp - lastTime) / 1000; // 轉為秒
+            lastTime = timestamp;
+
+            dropZoneHeight = gameStage.clientHeight;
+
+            if (currentDropWord && currentDropWord.status === 'falling') {
+                // 依 delta time 計算平滑位移
+                currentDropWord.y += currentDropWord.speed * deltaTime;
+                currentDropWord.element.style.transform = `translate3d(${currentDropWord.x}px, ${currentDropWord.y}px, 0)`;
+
+                // 判斷是否跨越底部的防禦臨界線
+                // 防禦線設定在 dropZone 底端 - 60px
+                const defenseLine = dropZoneHeight - 80;
+                if (currentDropWord.y >= defenseLine) {
+                    handleWordMiss();
+                }
+            }
+
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // 單字落地未完成處理 (失血、震動、換字)
+        function handleWordMiss() {
+            currentDropWord.status = 'failed';
+            playSynthSound('damage');
+
+            // 扣除生命
+            lives--;
+            updateHeartsUI();
+
+            // 為掉落區加上紅色一閃及震動特效
+            gameStage.classList.add("shake-effect");
+            currentDropWord.element.classList.add("text-red-500", "scale-95");
+            
+            // 動態還原字母展示（作答回饋，讓學生知道正確單字長怎樣）
+            currentDropWord.element.innerHTML = currentDropWord.fullWord;
+
+            setTimeout(() => {
+                gameStage.classList.remove("shake-effect");
+                if (lives <= 0) {
+                    triggerGameOver();
+                } else {
+                    spawnWord();
+                }
+            }, 800);
+        }
+
+        // 觸發遊戲結束
+        function triggerGameOver() {
+            gameActive = false;
+            cancelAnimationFrame(gameLoopId);
+
+            // 更新高分紀錄
+            if (score > highScore) {
+                highScore = score;
+            }
+
+            // 展現溫暖的激勵面板
+            finalScore.textContent = score;
+            highScoreDisplay.textContent = highScore;
+            
+            overlay.classList.remove("hidden");
+            startPanel.classList.add("hidden");
+            gameoverPanel.classList.remove("hidden");
+        }
+
+        // 重置並開啟新局
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            scoreDisplay.textContent = "0";
+            updateHeartsUI();
+            
+            overlay.classList.add("hidden");
+            gameoverPanel.classList.add("hidden");
+            
+            gameActive = true;
+            lastTime = 0;
+            spawnWord();
+            
+            // 啟動 requestAnimationFrame
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // 作答判定
+        function checkAnswer(letter) {
+            if (!gameActive || !currentDropWord || currentDropWord.status !== 'falling') return;
+
+            const pressed = letter.toUpperCase();
+            
+            if (pressed === currentDropWord.targetLetter) {
+                // 回答正確！
+                currentDropWord.status = 'solved';
+                playSynthSound('success');
+
+                // 分數遞增
+                score += 10;
+                scoreDisplay.textContent = score;
+
+                // 完美填入正確字母並變綠，隨後消失
+                const solvedHtml = currentDropWord.fullWord.substring(0, currentDropWord.targetIndex) +
+                                   `<span class="text-green-400 font-black decoration-transparent">${pressed}</span>` +
+                                   currentDropWord.fullWord.substring(currentDropWord.targetIndex + 1);
+                
+                currentDropWord.element.innerHTML = solvedHtml;
+                currentDropWord.element.classList.add("text-green-400", "scale-105", "transition-all", "duration-300");
+
+                // 短暫延遲後生成下一個單字 (保留視覺滿足感)
+                setTimeout(() => {
+                    if (gameActive) spawnWord();
+                }, 400);
+
+            } else {
+                // 回答錯誤 (不扣血，但按鍵會閃紅，給予微調策略的學習反饋)
+                playSynthSound('fail');
+                
+                // 讓對應的虛擬鍵盤按鈕閃爍紅色
+                flashKeyFeedback(pressed, 'error');
+            }
+        }
+
+        // 動態閃爍回饋
+        function flashKeyFeedback(letter, type) {
+            const keyBtn = document.querySelector(`.virtual-key[data-key="${letter}"]`);
+            if (!keyBtn) return;
+
+            if (type === 'error') {
+                keyBtn.classList.add("animate-pulse-red");
+                setTimeout(() => {
+                    keyBtn.classList.remove("animate-pulse-red");
+                }, 200);
+            }
+        }
+
+        // --- 事件綁定 ---
+
+        // 1. 虛擬鍵盤點擊監聽
+        keys.forEach(key => {
+            key.addEventListener("click", () => {
+                initAudio(); // 互動時初始化 Audio (部分瀏覽器安全性要求)
+                const letter = key.getAttribute("data-key");
+                checkAnswer(letter);
+                
+                // 點擊虛擬鍵盤時觸發縮放視覺回饋
+                key.classList.add("scale-90");
+                setTimeout(() => key.classList.remove("scale-90"), 100);
+            });
+        });
+
+        // 2. 實體鍵盤按下監聽
+        window.addEventListener("keydown", (e) => {
+            if (!gameActive) return;
+            initAudio();
+            
+            const pressedKey = e.key.toUpperCase();
+            // 僅限制 A-Z 鍵
+            if (/^[A-Z]$/.test(pressedKey)) {
+                checkAnswer(pressedKey);
+                
+                // 為實體鍵盤按下同步反應在虛擬鍵盤 UI
+                const vk = document.querySelector(`.virtual-key[data-key="${pressedKey}"]`);
+                if (vk) {
+                    vk.classList.add("bg-gray-600", "scale-90");
+                    setTimeout(() => vk.classList.remove("bg-gray-600", "scale-90"), 150);
+                }
+            }
+        });
+
+        // 開始按鈕點擊
+        btnStart.addEventListener("click", () => {
+            initAudio();
+            resetGame();
+        });
+
+        // 重來按鈕點擊
+        btnRestart.addEventListener("click", () => {
+            initAudio();
+            resetGame();
+        });
+
+        // 視窗 resize 時重算位置
+        window.addEventListener("resize", () => {
+            if (currentDropWord && gameStage) {
+                const stageWidth = gameStage.clientWidth;
+                // 防止 resize 後單字卡在邊界外面
+                if (currentDropWord.x + currentDropWord.width > stageWidth) {
+                    currentDropWord.x = Math.max(stageWidth - currentDropWord.width - 16, 16);
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
